@@ -48,6 +48,8 @@ pub mod search;
 pub mod tantivy;
 
 #[cfg(feature = "enterprise")]
+pub mod recomendations;
+#[cfg(feature = "enterprise")]
 pub mod search_jobs;
 pub mod self_reporting;
 pub mod session;
