@@ -17,7 +17,7 @@ use config::{
     META_ORG_ID,
     meta::{search, search::SearchEventType, stream::StreamType},
 };
-use infra::errors::Error;
+use infra::{errors::Error, schema::STREAM_SETTINGS};
 use o2_enterprise::enterprise::common::config::get_config as get_o2_config;
 
 use crate::service::search as SearchService;
@@ -25,8 +25,6 @@ use crate::service::search as SearchService;
 pub async fn get_query_data_from_usage(start_time: i64, end_time: i64) -> Result<search::Response, Error> {
     let trace_id = config::ider::generate_trace_id();
     let user_id = "query_reco_user".to_string();
-  
-
     let sql =r#"SELECT request_body ,count(request_body) as r_count , max(response_time) as m_rs  ,org_id FROM \"usage\" WHERE event = 'Search' AND search_type != 'ui' group by request_body ,org_id  order by m_rs desc"#.to_string();
 
     let req = config::meta::search::Request {
@@ -127,11 +125,24 @@ pub async fn get_distinct_values(
     Ok(resp)
 }
 
+async fn get_stream_settings() -> Result<(), Error> {
+    let r = STREAM_SETTINGS.read().await;
+    for (key, value) in r.iter() {
+        let columns = key.split('/').collect::<Vec<&str>>();
+        let org_id = columns[0];
+        let stream_type = StreamType::from(columns[1]);
+        let stream_name = columns[2];
+
+    }
+    Ok(())
+
+}  
+
 pub async fn get_recommendations()-> Result<(), Error>{
     let o2_config = get_o2_config();
     let end_time = chrono::Utc::now().timestamp_micros();
     let start_time =
-        end_time - (o2_config.common.query_recommendations_interval * 60 * 60 * 1000 * 1000);
+        end_time - (o2_config.common.query_recommendations_interval * 60 * 1000 * 1000);
     log::info!("Stage 1: Getting query data from usage");
     let usage_resp = get_query_data_from_usage(start_time, end_time).await?;
 
@@ -140,7 +151,7 @@ pub async fn get_recommendations()-> Result<(), Error>{
         log::info!("No queries found in usage");
         return Ok(());
     }
-    let usage_hits = o2_enterprise::enterprise::common::recommendations::RecommendationInputRecords::build_from_hits(q_hits)?;
+    //let usage_hits = o2_enterprise::enterprise::recommendations::RecommendationInputRecords::build_from_hits(q_hits)?;
 
     
     
