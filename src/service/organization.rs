@@ -538,6 +538,10 @@ pub async fn generate_invitation(
             }
         }
 
+        if let Err(_) = o2_enterprise::enterprise::cloud::email::check_email(invitee).await {
+            return Err(anyhow::anyhow!("Email Domain not allowed for {invitee}"));
+        }
+
         if get_billing_by_org_id(org_id).await?.is_none() {
             // If the org we are inviting to is paid, its fine to send invitations
             // irrespective of what other orgs invitees are part of.
