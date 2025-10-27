@@ -204,7 +204,10 @@ export const useSearchStream = () => {
     queryReq.query.from =
       (searchObj.data.resultGrid.currentPage - 1) *
       searchObj.meta.resultGrid.rowsPerPage;
-    queryReq.query.size = searchObj.meta.resultGrid.rowsPerPage;
+    // Increase size to 2000 when patterns mode is enabled to get more data for pattern extraction
+    queryReq.query.size = searchObj.meta.showPatterns
+      ? 2000
+      : searchObj.meta.resultGrid.rowsPerPage;
 
     const parsedSQL: any = fnParsedSQL();
 
@@ -213,11 +216,13 @@ export const useSearchStream = () => {
     if (searchObj.meta.sqlMode == true) {
       // if query has aggregation or groupby then we need to set size to -1 to get all records
       // issue #5432
-      if (hasAggregation(parsedSQL?.columns) || parsedSQL.groupby != null) {
+      // BUT: Don't override size when patterns mode is enabled - we need 2000 logs for pattern extraction
+      if ((hasAggregation(parsedSQL?.columns) || parsedSQL.groupby != null) && !searchObj.meta.showPatterns) {
         queryReq.query.size = -1;
       }
 
-      if (isLimitQuery(parsedSQL)) {
+      // Don't apply LIMIT from SQL when patterns mode is enabled - we need 2000 logs
+      if (isLimitQuery(parsedSQL) && !searchObj.meta.showPatterns) {
         queryReq.query.size = parsedSQL.limit.value[0].value;
         searchObj.meta.resultGrid.showPagination = false;
         //searchObj.meta.resultGrid.rowsPerPage = queryReq.query.size;
@@ -265,7 +270,14 @@ export const useSearchStream = () => {
         };
       }
 
-      const payload = buildWebSocketPayload(queryReq, isPagination, "search");
+      const payload = buildWebSocketPayload(queryReq, isPagination, "search", {
+        showPatterns: searchObj.meta.showPatterns,
+      });
+
+      if (searchObj.meta.showPatterns) {
+        console.log("[PATTERNS] Query size being sent:", queryReq.query.size);
+        console.log("[PATTERNS] Full query:", JSON.stringify(queryReq.query, null, 2));
+      }
 
       if (
         shouldGetPageCount(queryReq, fnParsedSQL()) &&
@@ -913,6 +925,19 @@ export const useSearchStream = () => {
       response?.type === "search_response_metadata"
     ) {
       handlePageCountStreamingMetadata(payload, response, payload.isPagination);
+      return;
+    }
+
+    // Handle pattern extraction results
+    if (response?.type === "pattern_extraction_result") {
+      if (response?.content) {
+        console.log("[PATTERNS] Raw response:", JSON.stringify(response.content));
+        // The API returns the full response object with patterns, statistics, config
+        searchObj.data.patterns = response.content;
+        console.log("[PATTERNS] Set searchObj.data.patterns to:", searchObj.data.patterns);
+        console.log("[PATTERNS] Patterns array:", searchObj.data.patterns?.patterns);
+        console.log("[PATTERNS] Statistics:", searchObj.data.patterns?.statistics);
+      }
       return;
     }
 
