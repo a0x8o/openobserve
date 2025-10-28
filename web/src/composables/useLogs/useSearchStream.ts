@@ -246,11 +246,18 @@ export const useSearchStream = () => {
   };
 
   //useLogs
-  const getDataThroughStream = (isPagination: boolean) => {
+  const getDataThroughStream = async (isPagination: boolean) => {
     try {
       const queryReq = getQueryReq(isPagination) as SearchRequestPayload;
 
       if (!queryReq) return;
+
+      // Patterns mode is handled separately in SearchBar.vue
+      // This function only handles logs and visualize modes
+      if (searchObj.meta.logsVisualizeToggle === 'patterns') {
+        console.log('[Search] Patterns mode - skipping logs search');
+        return;
+      }
 
       if (!isPagination && searchObj.meta.refreshInterval == 0) {
         resetQueryData();
@@ -923,14 +930,8 @@ export const useSearchStream = () => {
       return;
     }
 
-    // Handle pattern extraction results
-    if (response?.type === "pattern_extraction_result") {
-      if (response?.content) {
-        // The API returns the full response object with patterns, statistics, config
-        searchObj.data.patterns = response.content;
-      }
-      return;
-    }
+    // Pattern extraction is now handled via dedicated API endpoint
+    // No longer using streaming responses for patterns
 
     if (response.type === "search_response") {
       searchPartitionMap[payload.traceId] = searchPartitionMap[payload.traceId]
