@@ -833,6 +833,7 @@ const useLogs = () => {
     loadVisualizeData,
     loadPatternsData,
     processHttpHistogramResults,
+    getHistogramTitle,
   };
 };
 
