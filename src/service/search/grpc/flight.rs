@@ -45,12 +45,14 @@ use infra::{
     },
 };
 use itertools::Itertools;
+use liquid_cache_parquet::optimizers::rewrite_data_source_plan;
 use parking_lot::Mutex;
 use rayon::slice::ParallelSliceMut;
 
 use crate::service::{
     db,
     search::{
+        LIQUID_CACHE,
         datafusion::{
             distributed_plan::{
                 NewEmptyExecVisitor, ReplaceTableScanExec, codec::get_physical_extension_codec,
@@ -292,6 +294,7 @@ pub async fn search(
             index_condition.clone(),
             fst_fields.clone(),
             storage_idx_optimize_rule,
+            ctx.clone(),
         )
         .await
         {
@@ -449,8 +452,12 @@ pub async fn search(
         )
     );
 
+    if cfg.common.liquid_cache_enabled {
+        let pushdown_filter = FilterPushdown::new();
+        physical_plan = pushdown_filter.optimize(physical_plan, ctx.state().config_options())?;
+    }
+
     if cfg.common.feature_dynamic_pushdown_filter_enabled {
-        // pushdown filter
         let pushdown_filter = FilterPushdown::new_post_optimization();
         physical_plan = pushdown_filter.optimize(physical_plan, ctx.state().config_options())?;
     }
@@ -477,6 +484,11 @@ pub async fn search(
                     .build()
             )
         );
+    }
+
+    if cfg.common.liquid_cache_enabled {
+        // replace with liquid-cache
+        physical_plan = rewrite_data_source_plan(physical_plan, &LIQUID_CACHE);
     }
 
     log::info!(

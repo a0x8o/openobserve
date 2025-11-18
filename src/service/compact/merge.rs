@@ -851,7 +851,7 @@ pub async fn merge_files(
             .rules(diff_fields)
             .sorted_by_time(true)
             .need_optimize_partition(is_match_downsampling_rule)
-            .build(session, &files, latest_schema.clone())
+            .build(session, &files, latest_schema.clone(), None)
             .await
         {
             Ok(table) => tables.push(table),

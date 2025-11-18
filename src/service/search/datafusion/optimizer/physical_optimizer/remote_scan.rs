@@ -97,13 +97,14 @@ pub struct RemoteScanRule {
 impl RemoteScanRule {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        req: Request,
+        mut req: Request,
         nodes: Vec<Arc<dyn NodeInfo>>,
         file_id_lists: HashMap<TableReference, Vec<Vec<i64>>>,
         equal_keys: HashMap<TableReference, Vec<KvItem>>,
         is_leader: bool,
         opentelemetry_context: opentelemetry::Context,
     ) -> Self {
+        req.trace_id = "4e7b46e3cdf34054ba3fb31cfb69cc96".to_string();
         let remote_scan_nodes = RemoteScanNodes::new(
             req,
             nodes,

@@ -89,6 +89,10 @@ datafusion.workspace = true
 datafusion-proto.workspace = true
 datafusion-functions-aggregate-common.workspace = true
 datafusion-functions-json.workspace = true
+liquid-cache-parquet = "0.1.10"
+liquid-cache-common = "0.1.10"
+liquid-cache-local = "0.1.10"
+liquid-cache-storage = "0.1.10"
 arrow.workspace = true
 arrow-flight.workspace = true
 arrow-json.workspace = true
@@ -261,6 +265,7 @@ datafusion = "50.3.0"
 datafusion-proto = "50.3.0"
 datafusion-functions-aggregate-common = "50.3.0"
 datafusion-functions-json = "0.50.0"
+
 expect-test = "1.4"
 arrow = { version = "56.0.0", features = ["ipc_compression", "prettyprint"] }
 arrow-flight = "56.0.0"

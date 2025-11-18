@@ -1255,6 +1255,8 @@ pub struct Common {
         help = "enable ingestion error logs reporting"
     )]
     pub ingestion_log_enabled: bool,
+    #[env_config(name = "ZO_LIQUID_CACHE_ENABLED", default = false)]
+    pub liquid_cache_enabled: bool,
 }
 
 #[derive(EnvConfig, Default)]

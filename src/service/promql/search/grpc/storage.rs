@@ -241,7 +241,7 @@ pub(crate) async fn create_context(
     }
 
     let session = SearchSession {
-        id: trace_id.to_string(),
+        id: "1234567890".to_string(),
         storage_type: StorageType::Memory,
         work_group: None,
         target_partitions,

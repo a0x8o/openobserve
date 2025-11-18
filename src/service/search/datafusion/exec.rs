@@ -39,6 +39,7 @@ use datafusion::{
         cache::cache_manager::{CacheManagerConfig, FileStatisticsCache},
         context::SessionConfig,
         memory_pool::{FairSpillPool, GreedyMemoryPool, TrackConsumersPool, UnboundedMemoryPool},
+        options::ReadOptions,
         runtime_env::{RuntimeEnv, RuntimeEnvBuilder},
         session_state::SessionStateBuilder,
     },
@@ -46,7 +47,7 @@ use datafusion::{
     optimizer::{AnalyzerRule, OptimizerRule},
     physical_optimizer::PhysicalOptimizerRule,
     physical_plan::execute_stream,
-    prelude::{Expr, SessionContext},
+    prelude::{Expr, ParquetReadOptions, SessionContext},
 };
 use futures::TryStreamExt;
 use hashbrown::HashMap;
@@ -62,7 +63,6 @@ use {
 };
 
 use super::{
-    file_type::{FileType, GetExt},
     planner::extension_planner::OpenobserveQueryPlanner,
     storage::file_list,
     table_provider::{NewListingTable, uniontable::NewUnionTable},
@@ -408,6 +408,18 @@ pub fn create_session_config(
     // config = config.set_bool("datafusion.execution.parquet.pushdown_filters", true);
     // config = config.set_bool("datafusion.execution.parquet.reorder_filters", true);
 
+    if cfg.common.liquid_cache_enabled {
+        config.options_mut().execution.parquet.pushdown_filters = true;
+        config
+            .options_mut()
+            .execution
+            .parquet
+            .schema_force_view_types = false;
+        config.options_mut().execution.parquet.skip_arrow_metadata = false;
+        config.options_mut().execution.parquet.skip_metadata = false;
+        config.options_mut().execution.batch_size = PARQUET_BATCH_SIZE * 2;
+    }
+
     if cfg.common.bloom_filter_enabled {
         config = config.set_bool("datafusion.execution.parquet.bloom_filter_on_read", true);
     }
@@ -648,7 +660,7 @@ pub async fn register_table(
         .sorted_by_time(sorted_by_time)
         .file_stat_cache(ctx.runtime_env().cache_manager.get_file_statistic_cache())
         .need_optimize_partition(need_optimize_partition)
-        .build(session.clone(), files, schema)
+        .build(session.clone(), files, schema, Some(&ctx))
         .await?;
     ctx.register_table(table_name, table)?;
 
@@ -712,6 +724,7 @@ impl TableBuilder {
         session: SearchSession,
         files: &[FileKey],
         schema: Arc<Schema>,
+        ctx: Option<&SessionContext>,
     ) -> Result<Arc<dyn TableProvider>> {
         let cfg = get_config();
         let target_partitions = if session.target_partitions == 0 {
@@ -734,9 +747,15 @@ impl TableBuilder {
         .await?;
 
         // Configure listing options
-        let file_format = ParquetFormat::default();
-        let mut listing_options = ListingOptions::new(Arc::new(file_format))
-            .with_file_extension(FileType::PARQUET.get_ext())
+        let mut listing_options = if let Some(ctx) = ctx
+            && cfg.common.liquid_cache_enabled
+        {
+            ParquetReadOptions::default()
+                .to_listing_options(&ctx.copied_config(), ctx.copied_table_options())
+        } else {
+            ListingOptions::new(Arc::new(ParquetFormat::default()))
+        };
+        listing_options = listing_options
             .with_target_partitions(target_partitions)
             .with_collect_stat(true); // current is default to true
 
@@ -1349,7 +1368,7 @@ mod tests {
                 .sorted_by_time(true)
                 .need_optimize_partition(false);
 
-            let result = builder.build(session, &files, schema).await;
+            let result = builder.build(session, &files, schema, None).await;
             assert!(result.is_ok());
 
             Ok(())

@@ -31,13 +31,16 @@ use datafusion::{
         datatypes::{DataType, Schema},
     },
     error::{DataFusionError, Result},
+    physical_optimizer::{PhysicalOptimizerRule, filter_pushdown::FilterPushdown},
     physical_plan::{
-        Partitioning, execute_stream_partitioned, expressions::Column, repartition::RepartitionExec,
+        ExecutionPlan, Partitioning, execute_stream_partitioned, expressions::Column,
+        repartition::RepartitionExec,
     },
     prelude::{DataFrame, SessionContext, col, lit},
 };
 use futures::{TryStreamExt, future::try_join_all};
 use hashbrown::HashMap;
+use liquid_cache_parquet::optimizers::rewrite_data_source_plan;
 use promql_parser::{
     label::MatchOp,
     parser::{
@@ -52,8 +55,9 @@ use super::{
     PromqlContext,
     utils::{apply_label_selector, apply_matchers},
 };
-use crate::service::promql::{
-    aggregations, binaries, functions, micros, rewrite::remove_filter_all, value::*,
+use crate::service::{
+    promql::{aggregations, binaries, functions, micros, rewrite::remove_filter_all, value::*},
+    search::LIQUID_CACHE,
 };
 type TokioResult = tokio::task::JoinHandle<Result<(HashMap<u64, Vec<Sample>>, HashSet<i64>)>>;
 type TokioExemplarsResult =
@@ -1293,6 +1297,7 @@ async fn load_samples_from_datafusion(
     hash_field_type: &DataType,
     df: DataFrame,
 ) -> Result<(HashMap<u64, RangeValue>, HashSet<i64>)> {
+    let cfg = config::get_config();
     let ctx = Arc::new(df.task_ctx());
     let target_partitions = ctx.session_config().target_partitions();
     let plan = df
@@ -1300,13 +1305,21 @@ async fn load_samples_from_datafusion(
         .create_physical_plan()
         .await?;
     let schema = plan.schema();
-    let plan = Arc::new(RepartitionExec::try_new(
+    let mut plan = Arc::new(RepartitionExec::try_new(
         plan,
         Partitioning::Hash(
             vec![Arc::new(Column::new_with_schema(HASH_LABEL, &schema)?)],
             target_partitions,
         ),
-    )?);
+    )?) as Arc<dyn ExecutionPlan>;
+    if cfg.common.liquid_cache_enabled {
+        let pushdown_filter = FilterPushdown::new();
+        plan = pushdown_filter.optimize(plan, ctx.session_config().options())?;
+        plan = rewrite_data_source_plan(plan, &LIQUID_CACHE);
+    }
+
+    config::meta::plan::print_plan(plan.as_ref());
+
     let streams = execute_stream_partitioned(plan, ctx)?;
 
     let mut tasks = Vec::new();

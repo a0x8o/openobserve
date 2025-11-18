@@ -306,7 +306,7 @@ pub async fn search_parquet(
             .index_condition(index_condition.clone())
             .fst_fields(fst_fields.clone())
             .need_optimize_partition(true)
-            .build(session, &files, latest_schema.clone())
+            .build(session, &files, latest_schema.clone(), None)
             .await
         {
             Ok(v) => tables.push(v),

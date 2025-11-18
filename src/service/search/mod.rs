@@ -13,14 +13,14 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::{cmp::max, sync::Arc};
+use std::{cmp::max, path::PathBuf, sync::Arc};
 
 use arrow::array::RecordBatch;
 use arrow_schema::{DataType, Field, Schema};
 use cache::cacher::get_ts_col_order_by;
 use chrono::{Duration, Utc};
 use config::{
-    TIMESTAMP_COL_NAME,
+    PARQUET_BATCH_SIZE, TIMESTAMP_COL_NAME,
     cluster::LOCAL_NODE,
     get_config, ider,
     meta::{
@@ -47,6 +47,9 @@ use infra::{
     errors::{Error, ErrorCodes},
     schema::unwrap_stream_settings,
 };
+use liquid_cache_common::IoMode;
+use liquid_cache_parquet::LiquidCache;
+use liquid_cache_storage::{cache::squeeze_policies::Evict, cache_policies::LiquidPolicy};
 use once_cell::sync::Lazy;
 use opentelemetry::trace::TraceContextExt;
 use proto::cluster_rpc::{self, SearchQuery};
@@ -133,6 +136,17 @@ pub static DATAFUSION_RUNTIME: Lazy<Runtime> = Lazy::new(|| {
         .enable_all()
         .build()
         .unwrap()
+});
+
+pub static LIQUID_CACHE: Lazy<Arc<LiquidCache>> = Lazy::new(|| {
+    Arc::new(LiquidCache::new(
+        PARQUET_BATCH_SIZE * 2,
+        0,
+        PathBuf::from("/tmp/liquid_cache"), // local disk cache path
+        Box::new(LiquidPolicy::new()),
+        Box::new(Evict),
+        IoMode::TokioIO,
+    ))
 });
 
 // Please note: `query_fn` which is the vrl needs to be base64::decoded
