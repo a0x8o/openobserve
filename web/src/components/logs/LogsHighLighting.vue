@@ -35,32 +35,48 @@ Usage Examples:
 - <LogsHighLighting :data="1234567890123" />  // Timestamp-like number
 -->
 <template>
-  <span
-    class="logs-highlight-json"
-    v-html="processedResults[`${props.column.id}_${props.index}`]"
-  ></span>
+  <span class="logs-highlight-json" v-html="colorizedJson"></span>
 </template>
 
 <script setup lang="ts">
 import { computed, withDefaults } from "vue";
+import { useStore } from "vuex";
 import { useLogsHighlighter } from "@/composables/useLogsHighlighter";
 
 /**
  * Component Props Interface
  */
 interface Props {
-  column: any; // Only highlighting, no semantic colorization
-  index: number;
+  data: any;
+  showBraces?: boolean;
+  showQuotes?: boolean;
+  queryString?: string;
+  simpleMode?: boolean; // Only highlighting, no semantic colorization
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  column: {},
+  showBraces: true,
+  showQuotes: false,
+  queryString: "",
+  simpleMode: false,
 });
 
-const { processedResults } = useLogsHighlighter();
+const store = useStore();
+const { colorizeJson } = useLogsHighlighter();
 
-defineExpose({
-  processedResults,
+/**
+ * Main colorization logic with integrated highlighting
+ * Uses the composable to avoid code duplication
+ */
+const colorizedJson = computed((): string => {
+  return colorizeJson(
+    props.data,
+    store.state.theme === "dark",
+    props.showBraces,
+    props.showQuotes,
+    props.queryString,
+    props.simpleMode
+  );
 });
 </script>
 
@@ -71,7 +87,4 @@ defineExpose({
   word-break: break-word;
   display: inline;
 }
-
-/* Import log highlighting CSS classes */
-@import '@/assets/styles/log-highlighting.css';
 </style>
